@@ -2,6 +2,18 @@
 
 = Docs =
 
+http://dl.google.com/io/2009/pres/Th_0200_GoogleWebToolkitArchitecture-BestPracticesForArchitectingYourGWTApp.pdf
+
+http://www.wildcrest.com/Potel/Portfolio/mvp.pdf
+
+http://www.martinfowler.com/eaaDev/uiArchs.html#Model-view-presentermvp
+
 = Links =
 
-= Configuration =
+you need the following library
+
+[http://code.google.com/p/google-guice/downloads/list google guice with AOP]
+
+[http://code.google.com/p/pennychecker-presenter/downloads/list pennychecker-presenter]
+
+[http://code.google.com/p/pennychecker-presenter/wiki/ConfigureGuice ConfigureGuice]
