@@ -1,6 +1,7 @@
 #summary Everything you need
 
 = Docs =
+What is mvp and where it comes from
 
 http://dl.google.com/io/2009/pres/Th_0200_GoogleWebToolkitArchitecture-BestPracticesForArchitectingYourGWTApp.pdf
 
@@ -9,8 +10,7 @@ http://www.wildcrest.com/Potel/Portfolio/mvp.pdf
 http://www.martinfowler.com/eaaDev/uiArchs.html#Model-view-presentermvp
 
 = Links =
-
-you need the following library
+The following libraries are needed
 
 [http://code.google.com/p/google-guice/downloads/list google guice with AOP]
 
