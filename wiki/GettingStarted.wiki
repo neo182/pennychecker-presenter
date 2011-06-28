@@ -16,4 +16,5 @@ The following libraries are needed
 
 [http://code.google.com/p/pennychecker-presenter/downloads/list pennychecker-presenter]
 
+= Next step=
 [http://code.google.com/p/pennychecker-presenter/wiki/ConfigureGuice ConfigureGuice]
