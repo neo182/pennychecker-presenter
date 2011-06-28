@@ -23,4 +23,4 @@ The following libraries are needed
 = Example Applications =
 [http://code.google.com/p/pennychecker-presenter/downloads/detail?name=swing-mvp-example.zip&can=2&q=#makechanges SwingMvpExample Bin]
 
-[http://code.google.com/p/pennychecker-presenter/source/checkout SwingMvpExample svn]
+[http://code.google.com/p/pennychecker-presenter/source/checkout /trunk/swing-mvp-example svn]
