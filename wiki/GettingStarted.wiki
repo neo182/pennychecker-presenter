@@ -9,7 +9,7 @@ http://www.wildcrest.com/Potel/Portfolio/mvp.pdf
 
 http://www.martinfowler.com/eaaDev/uiArchs.html#Model-view-presentermvp
 
-
+[http://code.google.com/p/gwt-presenter/ mvp for gwt]
 
 = Links =
 The following libraries are needed
