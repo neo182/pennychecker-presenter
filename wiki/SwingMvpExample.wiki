@@ -5,7 +5,151 @@
 
 = Details =
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+We create a simple user management. Users can be created, edited or deleted. In addition, all users are displayed in a list.
+
+= Events =
+
+We need two events. An event when a user's data have been changed and an event to announce that a new user to be created or edited.
+
+{{{
+public interface EditUserEventHandler extends EventHandler {
+    void onEditUserEvent(EditUserEvent event);
+}
+
+public final class EditUserEvent extends Event<EditUserEventHandler> {
+
+    public final static Type<EditUserEventHandler> TYPE = new Type<EditUserEventHandler>();
+
+    @Override
+    public Type<EditUserEventHandler> getAssociatedType() {
+        return TYPE;
+    }
+
+    @Override
+    protected void dispatch(EditUserEventHandler h) {
+        h.onEditUserEvent(this);
+    }
+}
+}}}
+
+{{{
+public interface UserChangedEventHandler extends EventHandler {
+    void onUserChangedEvent(UserChangedEvent event);
+}
+
+public final class UserChangedEvent extends Event<UserChangedEventHandler> {
+
+    public final static Type<UserChangedEventHandler> TYPE = new Type<UserChangedEventHandler>();
+
+    @Override
+    public Type<UserChangedEventHandler> getAssociatedType() {
+        return TYPE;
+    }
+
+    @Override
+    protected void dispatch(UserChangedEventHandler h) {
+        h.onUserChangedEvent(this);
+    }
+}
+}}}
+
+= Presenter =
+
+We need a presenter for the processing of a user.
+
+{{{
+public final class EditUserPresenter extends SwingPresenter<EditUserPresenter.Display> {
+
+    /**
+     * 
+     * @param display
+     * @param eventBus
+     */
+    @Inject
+    public EditUserPresenter(Display display, EventBus eventBus) {
+        super(display, eventBus);
+    }
+
+    @Override
+    protected void onBind() {
+    }
+
+    @Override
+    protected void onUnbind() {
+    }
+
+    public void refreshDisplay() {
+    }
+
+    public interface Display extends SwingDisplay {
+    }
+}
+}}}
+
+To display all users, we need a presenter.
+
+{{{
+public final class AllUserPresenter extends SwingPresenter<AllUserPresenter.Display> {
+
+    /**
+     * 
+     * @param display
+     * @param eventBus
+     */
+    @Inject
+    public AllUserPresenter(Display display, EventBus eventBus) {
+        super(display, eventBus);
+    }
+
+    @Override
+    protected void onBind() {
+    }
+
+    @Override
+    protected void onUnbind() {
+    }
+
+    public void refreshDisplay() {
+    }
+    public interface Display extends SwingDisplay {
+
+    }
+}
+}}}
+
+We need a container presenter. He can easily manage presenter. E.g. Views can be placed on a PresenterRevealedEvent for viewing.
+
+{{{
+public class UserContainerPresenter extends SwingContainerPresenter<UserContainerPresenter.Display> {
+
+    /**
+     * 
+     * @param display
+     * @param eventBus
+     * @param editUserPresenter
+     * @param allUserPresenter 
+     */
+    @Inject
+    public UserContainerPresenter(Display display, EventBus eventBus, EditUserPresenter editUserPresenter, AllUserPresenter allUserPresenter) {
+        super(display, eventBus,editUserPresenter,allUserPresenter);
+
+        assert null != editUserPresenter;
+        assert null != editUserPresenter.getDisplay().asComponent().getName();
+
+        assert null != allUserPresenter;
+        assert null != allUserPresenter.getDisplay().asComponent().getName();
+        
+        display.addComponent(allUserPresenter.getDisplay().asComponent());
+        display.addComponent(editUserPresenter.getDisplay().asComponent());
+        
+        showPresenter(allUserPresenter);
+        bind();
+    }
+
+    public void refreshDisplay() {
+    }
+
+    public interface Display extends SwingContainerDisplay {
+    }
+}
+}}}
