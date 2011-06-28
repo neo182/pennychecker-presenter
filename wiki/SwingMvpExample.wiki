@@ -1,8 +1,6 @@
-#summary One-sentence summary of this page.
+#summary Model View Presenter swing application
 
-= Introduction =
-
-Add your content here.
+[http://code.google.com/p/pennychecker-presenter/wiki/GettingStarted GettingStarted]
 
 
 = Details =
