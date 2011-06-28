@@ -19,7 +19,7 @@ package com.pennychecker.example;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.pennychecker.example.mvp.presenter.UserContainerPresenter;
-import com.pennychecker.example.mvp.guice.MvpModule;
+import com.pennychecker.example.guice.MvpModule;
 
 /**
  *
