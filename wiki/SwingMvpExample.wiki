@@ -58,20 +58,61 @@ public final class UserChangedEvent extends Event<UserChangedEventHandler> {
 We need a presenter for the processing of a user.
 
 {{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
 public final class EditUserPresenter extends SwingPresenter<EditUserPresenter.Display> {
+
+    private User selectedUser;
+    private final UserRepository userRepository;
 
     /**
      * 
      * @param display
      * @param eventBus
+     * @param userRepository  
      */
     @Inject
-    public EditUserPresenter(Display display, EventBus eventBus) {
+    public EditUserPresenter(Display display, EventBus eventBus, UserRepository userRepository) {
         super(display, eventBus);
+        assert null != userRepository;
+        this.userRepository = userRepository;
+        bind();
     }
 
     @Override
     protected void onBind() {
+
+        registerHandler(eventBus.addHandler(EditUserEvent.TYPE, new EditUserEventHandler() {
+
+            public void onEditUserEvent(EditUserEvent event) {
+                selectedUser = event.getUser();
+
+                if (null == selectedUser) {
+                    display.clearForm();
+                } else {
+                    display.setUser(selectedUser);
+                }
+
+                eventBus.fireEvent(new PresenterRevealedEvent(EditUserPresenter.this));
+            }
+        }));
+
+        display.getSaveButton().addActionListener(new ActionListener() {
+
+            public void actionPerformed(ActionEvent e) {
+                saveUser();
+            }
+        });
+
+        display.getCloseButton().addActionListener(new ActionListener() {
+
+            public void actionPerformed(ActionEvent e) {
+                display.clearForm();
+                eventBus.fireEvent(new UserChangedEvent(null));
+            }
+        });
     }
 
     @Override
@@ -82,6 +123,61 @@ public final class EditUserPresenter extends SwingPresenter<EditUserPresenter.Di
     }
 
     public interface Display extends SwingDisplay {
+
+        JButton getSaveButton();
+
+        JButton getCloseButton();
+
+        String getFirstname();
+
+        String getLastName();
+
+        public void setErrorMessage(String string);
+
+        public void clearForm();
+
+        public void setUser(User user);
+
+        public void setWarningMessage(String string);
+    }
+
+    private void saveUser() {
+        assert null != display.getFirstname();
+        assert null != display.getLastName();
+        final String firstname = display.getFirstname();
+        final String lastname = display.getLastName();
+
+        if (firstname.isEmpty()) {
+            display.setWarningMessage("Please insert the firstname.");
+            return;
+        }
+
+        if (lastname.isEmpty()) {
+            display.setWarningMessage("Please insert the lastname.");
+            return;
+        }
+        final User user;
+
+        if (null == selectedUser) {
+            user = new User(firstname, lastname);
+        } else {
+            user = selectedUser;
+            user.setFirstname(firstname);
+            user.setLastname(lastname);
+        }
+        try {
+            userRepository.save(user);
+        } catch (Exception ex) {
+            Logger.getLogger(EditUserPresenter.class.getName()).log(Level.SEVERE, null, ex);
+            display.setErrorMessage("Could not save the user.");
+            return;
+        }
+
+
+        selectedUser = null;
+        display.clearForm();
+
+        eventBus.fireEvent(new UserChangedEvent(user));
     }
 }
 }}}
@@ -89,20 +185,121 @@ public final class EditUserPresenter extends SwingPresenter<EditUserPresenter.Di
 To display all users, we need a presenter.
 
 {{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
 public final class AllUserPresenter extends SwingPresenter<AllUserPresenter.Display> {
+
+    private final List<User> users = new ArrayList<User>();
+    private User selectedUser;
+    private final UserRepository userRepository;
 
     /**
      * 
      * @param display
      * @param eventBus
+     * @param userRepository 
      */
     @Inject
-    public AllUserPresenter(Display display, EventBus eventBus) {
+    public AllUserPresenter(Display display, EventBus eventBus, UserRepository userRepository) {
         super(display, eventBus);
+        assert null != userRepository;
+        this.userRepository = userRepository;
+        bind();
+        fetchUsers();
     }
 
     @Override
     protected void onBind() {
+
+        display.getUserList().addListSelectionListener(new ListSelectionListener() {
+
+            public void valueChanged(ListSelectionEvent e) {
+                int index = display.getSelectedUserIndex();
+                if (index < 0) {
+                    return;
+                }
+                selectedUser = users.get(index);
+                display.setSelectedUser(selectedUser);
+            }
+        });
+
+        display.getUserList().addMouseListener(new MouseAdapter() {
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int index = display.getSelectedUserIndex();
+                    if (index < 0) {
+                        return;
+                    }
+                    final User selectedUser = users.get(index);
+                    display.setSelectedUser(selectedUser);
+
+                    eventBus.fireEvent(new EditUserEvent(selectedUser));
+                }
+            }
+        });
+
+        registerHandler(eventBus.addHandler(UserChangedEvent.TYPE, new UserChangedEventHandler() {
+
+            public void onUserChangedEvent(UserChangedEvent event) {
+
+                User user = event.getUser();
+
+                if (null == user) {
+                    firePresenterRevealedEvent();
+                    return;
+                }
+
+                if (!users.contains(user)) {
+                    users.add(user);
+                }
+
+                selectedUser = user;
+                display.setSelectedUser(selectedUser);
+                display.setUsers(users);
+                display.setSelection(users.indexOf(user));
+                firePresenterRevealedEvent();
+            }
+        }));
+
+
+        display.getAddUserButton().addActionListener(new ActionListener() {
+
+            public void actionPerformed(ActionEvent e) {
+                eventBus.fireEvent(new EditUserEvent(null));
+            }
+        });
+        
+        display.getEditUserButton().addActionListener(new ActionListener() {
+
+            public void actionPerformed(ActionEvent e) {
+                if ( null == selectedUser ) {
+                    display.setWarning("Please select a user.");
+                    return;
+                }
+                
+                eventBus.fireEvent(new EditUserEvent(selectedUser));
+            }
+        });
+        
+        display.getRemoveUSerButton().addActionListener(new ActionListener() {
+
+            public void actionPerformed(ActionEvent e) {
+                
+                if ( null == selectedUser ) {
+                    display.setWarning("Select a user.");
+                    return;
+                }
+                users.remove(selectedUser);
+                selectedUser = null;
+                display.clearSelections();
+                display.setUsers(users);
+                display.setSelectedUser(selectedUser);
+            }
+        });
     }
 
     @Override
@@ -111,8 +308,48 @@ public final class AllUserPresenter extends SwingPresenter<AllUserPresenter.Disp
 
     public void refreshDisplay() {
     }
+
+    private void fetchUsers() {
+        users.clear();
+        final List<User> userList;
+        try {
+            userList = userRepository.finaAll();
+        } catch (Exception ex) {
+            display.setError("Could not fetch users.");
+            return;
+        }
+
+        display.setUsers(userList);
+        display.clearSelections();
+    }
+
     public interface Display extends SwingDisplay {
 
+        JList getUserList();
+
+        JButton getAddUserButton();
+        
+        JButton getEditUserButton();
+        
+        JButton getRemoveUSerButton();
+
+        public int getSelectedUserIndex();
+
+        public void setSelectedUser(User selectedUser);
+
+        public void setUsers(List<User> users);
+
+        public void clearSelections();
+
+        public void setSelection(int index);
+
+        public void setWarning(String string);
+
+        public void setError(String string);
+    }
+
+    public void firePresenterRevealedEvent() {
+        eventBus.fireEvent(new PresenterRevealedEvent(AllUserPresenter.this));
     }
 }
 }}}
@@ -120,6 +357,10 @@ public final class AllUserPresenter extends SwingPresenter<AllUserPresenter.Disp
 We need a container presenter. He can easily manage presenter. E.g. Views can be placed on a PresenterRevealedEvent for viewing.
 
 {{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
 public class UserContainerPresenter extends SwingContainerPresenter<UserContainerPresenter.Display> {
 
     /**
@@ -162,14 +403,26 @@ All views implement their presenter display interfaces
 View for the EditUserPresenter
 
 {{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
 public class EditUserView extends javax.swing.JPanel implements EditUserPresenter.Display{
     private static final long serialVersionUID = 1L;
 
+    /** Creates new form EditUserView */
     public EditUserView() {
         initComponents();
+        this.setName("editUserView");
     }
 
-    @SuppressWarnings("unchecked")                         
+    /** This method is called from within the constructor to
+     * initialize the form.
+     * WARNING: Do NOT modify this code. The content of this method is
+     * always regenerated by the Form Editor.
+     */
+    @SuppressWarnings("unchecked")
+    // <editor-fold defaultstate="collapsed" desc="Generated Code">                          
     private void initComponents() {
 
         jTextFieldFirstname = new javax.swing.JTextField();
@@ -230,14 +483,49 @@ public class EditUserView extends javax.swing.JPanel implements EditUserPresente
                     .addComponent(jButtonCancel))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
-    }                        
-                         
+    }// </editor-fold>                        
+    // Variables declaration - do not modify                     
     private javax.swing.JButton jButtonCancel;
     private javax.swing.JButton jButtonSave;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JTextField jTextFieldFirstname;
     private javax.swing.JTextField jTextFieldLastname;
+    // End of variables declaration                   
+
+    public JButton getSaveButton() {
+        return jButtonSave;
+    }
+
+    public JButton getCloseButton() {
+        return jButtonCancel;
+    }
+
+    public String getFirstname() {
+        return jTextFieldFirstname.getText();
+    }
+
+    public String getLastName() {
+        return jTextFieldLastname.getText();
+    }
+
+    public void setErrorMessage(String string) {
+        JOptionPane.showMessageDialog(this, string, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+    
+    public void setWarningMessage(String string) {
+        JOptionPane.showMessageDialog(this, string, "Warning", JOptionPane.WARNING_MESSAGE);
+    }
+
+    public void clearForm() {
+        jTextFieldFirstname.setText("");
+        jTextFieldLastname.setText("");
+    }
+
+    public void setUser(User user) {
+        jTextFieldFirstname.setText(user.getFirstname());
+        jTextFieldLastname.setText(user.getLastname());
+    }
 
     @Override
     public JComponent asComponent() {
@@ -249,15 +537,27 @@ public class EditUserView extends javax.swing.JPanel implements EditUserPresente
 View for AllUserPresenter
 
 {{{
-public class AllUserView extends javax.swing.JPanel implements AllUserPresenter.Display{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public class AllUserView extends javax.swing.JPanel implements AllUserPresenter.Display {
 
     private static final long serialVersionUID = 1L;
 
+    /** Creates new form AllUserView */
     public AllUserView() {
         initComponents();
+        this.setName("allUserView");
     }
 
-    @SuppressWarnings("unchecked")                        
+    /** This method is called from within the constructor to
+     * initialize the form.
+     * WARNING: Do NOT modify this code. The content of this method is
+     * always regenerated by the Form Editor.
+     */
+    @SuppressWarnings("unchecked")
+    // <editor-fold defaultstate="collapsed" desc="Generated Code">                          
     private void initComponents() {
 
         jLabel1 = new javax.swing.JLabel();
@@ -338,8 +638,8 @@ public class AllUserView extends javax.swing.JPanel implements AllUserPresenter.
                     .addComponent(jButtonAdd))
                 .addContainerGap())
         );
-    }                        
-                         
+    }// </editor-fold>                        
+    // Variables declaration - do not modify                     
     private javax.swing.JButton jButtonAdd;
     private javax.swing.JButton jButtonEdit;
     private javax.swing.JButton jButtonRemove;
@@ -349,12 +649,70 @@ public class AllUserView extends javax.swing.JPanel implements AllUserPresenter.
     private javax.swing.JLabel jLabelLastname;
     private javax.swing.JList jListUsers;
     private javax.swing.JScrollPane jScrollPane1;
-}
+    // End of variables declaration                   
 
-    @Override
+    public JList getUserList() {
+        return jListUsers;
+    }
+
+    public JButton getAddUserButton() {
+        return jButtonAdd;
+    }
+
+    public int getSelectedUserIndex() {
+        return jListUsers.getSelectedIndex();
+    }
+
+    public void setSelectedUser(User selectedUser) {
+
+        if (null == selectedUser) {
+            jLabelFirstname.setText("");
+            jLabelLastname.setText("");
+            return;
+        }
+        jLabelFirstname.setText(selectedUser.getFirstname());
+        jLabelLastname.setText(selectedUser.getLastname());
+    }
+
+    public void setUsers(List<User> users) {
+        final DefaultListModel model = new DefaultListModel();
+
+        for (int i = 0; i < users.size(); i++) {
+            final User user = users.get(i);
+            model.add(i, user.getFirstname() + " " + user.getLastname());
+        }
+
+        jListUsers.setModel(model);
+    }
+
+    public void clearSelections() {
+        jListUsers.clearSelection();
+    }
+
+    public void setSelection(int index) {
+        jListUsers.setSelectedIndex(index);
+    }
+
+    public JButton getEditUserButton() {
+        return jButtonEdit;
+    }
+
+    public JButton getRemoveUSerButton() {
+        return jButtonRemove;
+    }
+
+    public void setError(String string) {
+        JOptionPane.showMessageDialog(this, string, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    public void setWarning(String string) {
+        JOptionPane.showMessageDialog(this, string, "Warning", JOptionPane.WARNING_MESSAGE);
+    }
+
     public JComponent asComponent() {
         return this;
     }
+}
 }}}
 
 View for the UserContainer presenter
@@ -457,4 +815,3 @@ public final class User {
     }
 }
 }}}
-
