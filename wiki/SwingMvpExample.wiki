@@ -16,9 +16,18 @@ public interface EditUserEventHandler extends EventHandler {
     void onEditUserEvent(EditUserEvent event);
 }
 
+/**
+ *
+ * @author Steffen Kämpke
+ */
 public final class EditUserEvent extends Event<EditUserEventHandler> {
 
     public final static Type<EditUserEventHandler> TYPE = new Type<EditUserEventHandler>();
+    private final User user;
+
+    public EditUserEvent(User user) {
+        this.user = user;
+    }
 
     @Override
     public Type<EditUserEventHandler> getAssociatedType() {
@@ -29,6 +38,10 @@ public final class EditUserEvent extends Event<EditUserEventHandler> {
     protected void dispatch(EditUserEventHandler h) {
         h.onEditUserEvent(this);
     }
+
+    public User getUser() {
+        return user;
+    }
 }
 }}}
 
@@ -37,9 +50,18 @@ public interface UserChangedEventHandler extends EventHandler {
     void onUserChangedEvent(UserChangedEvent event);
 }
 
+/**
+ *
+ * @author Steffen Kämpke
+ */
 public final class UserChangedEvent extends Event<UserChangedEventHandler> {
 
     public final static Type<UserChangedEventHandler> TYPE = new Type<UserChangedEventHandler>();
+    private final User user;
+
+    public UserChangedEvent(User user) {
+        this.user = user;
+    }
 
     @Override
     public Type<UserChangedEventHandler> getAssociatedType() {
@@ -49,6 +71,10 @@ public final class UserChangedEvent extends Event<UserChangedEventHandler> {
     @Override
     protected void dispatch(UserChangedEventHandler h) {
         h.onUserChangedEvent(this);
+    }
+
+    public User getUser() {
+        return user;
     }
 }
 }}}
