@@ -1,0 +1,35 @@
+@CHARSET "ISO-8859-1";
+#panelNavigationView {
+	background-color:black;
+}
+
+.panelNavigationView {
+	width:250px;
+	background-color:#95A7B6;
+	float:left;
+	border: 1px solid #777777;
+}
+
+.panelUserContainerView {
+	width:550px;
+	background-color:#D3C2AB;
+	border: 1px solid #777777;
+}
+
+#main {
+	width:900px;
+	height:650px;	
+	text-align:left;	
+}
+
+#display {
+	text-align:center;	
+}
+
+#panelNavigation{
+	height:400px;
+}
+
+#userContainerPanel{
+	height:400px;
+}
