@@ -1,13 +1,1308 @@
-#summary One-sentence summary of this page.
+#summary Model View Presenter swing application
 
-= Introduction =
+[http://code.google.com/p/pennychecker-presenter/wiki/GettingStarted GettingStarted]
 
-Add your content here.
+[http://blog.yanivkessler.com/2010/05/wicket-and-guice-alternate-route.html Wicket and guice integration]
 
 
 = Details =
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+We create a simple user management. Users can be created, edited or deleted. In addition, all users are displayed in a list.
+
+= Events =
+
+We need two events. An event when a user's data have been changed and an event to announce that a new user to be created or edited.
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public interface EditUserEventHandler extends EventHandler{
+	void onEditUserEvent(EditUserEvent event);
+}
+
+/**
+ * @author Steffen Kaempke
+ */
+public final class EditUserEvent extends Event<EditUserEventHandler>{
+
+	public final static Type<EditUserEventHandler> TYPE = new Type<EditUserEventHandler>();
+	public final WicketUser user;
+	
+	
+	
+	public EditUserEvent(WicketUser user) {
+		this.user = user;
+	}
+
+	@Override
+	public com.pennychecker.eventbus.Event.Type<EditUserEventHandler> getAssociatedType() {
+		return TYPE;
+	}
+
+	@Override
+	protected void dispatch(EditUserEventHandler handler) {
+		handler.onEditUserEvent(this);
+	}
+
+	public WicketUser getUser() {
+		return user;
+	}
+}
+}}}
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public interface UserChangedEventHandler extends EventHandler {
+	void onShowAllUserEvent(UserChangedEvent event);
+}
+
+/**
+ * @author Steffen Kaempke
+ */
+public final class UserChangedEvent extends Event<UserChangedEventHandler>{
+
+	public final static Type<UserChangedEventHandler> TYPE = new Type<UserChangedEventHandler>();
+	private final WicketUser wicketUser;
+	
+	 
+	public UserChangedEvent(WicketUser wicketUser) {		
+		this.wicketUser = wicketUser;
+	}
+
+	@Override
+	public com.pennychecker.eventbus.Event.Type<UserChangedEventHandler> getAssociatedType() {
+		return TYPE;
+	}
+
+	@Override
+	protected void dispatch(UserChangedEventHandler handler) {
+		handler.onShowAllUserEvent(this);
+		
+	}
+
+	public WicketUser getWicketUser() {
+		return wicketUser;
+	}
+}
+}}}
+
+= Presenter =
+
+We need a presenter for the processing of a user.
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public final class EditUserPresenter extends WicketPresenter<EditUserPresenter.Display> {
+	
+	private WicketUser wicketUser;
+	
+	@Inject
+	public EditUserPresenter(Display display, EventBus eventBus) {
+		super(display, eventBus);
+		bind();
+		display.setPresenter(this);
+	}
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -186888559414222126L;
+
+	public interface Display extends WicketDisplay<EditUserPresenter> {
+
+		String getFirstname();
+
+		String getLastname();
+
+		String getBirth();
+
+		void setWicketUser(WicketUser wicketUser);
+
+		void clearForm();
+
+		void setErrorMessageBirth(String string);
+
+		void setErrorMessageFirstname(String string);
+
+		void setErrorMessageLastname(String string);
+
+	}
+
+	public void refreshDisplay() {
+
+	}
+
+	@Override
+	protected void onBind() {
+		registerHandler(eventBus.addHandler(EditUserEvent.TYPE, new EditUserEventHandler() {
+			
+			public void onEditUserEvent(EditUserEvent event) {
+				wicketUser = event.getUser();
+				
+				if ( null == wicketUser ) {
+					display.clearForm();
+				} else {
+					display.setWicketUser(wicketUser);
+				}
+				
+				eventBus.fireEvent(new PresenterRevealedEvent(EditUserPresenter.this));
+			}
+		}));
+	}
+
+	@Override
+	protected void onUnbind() {
+
+	}
+
+	public void save_action() {
+		final String firstname = display.getFirstname();
+		final String lastname = display.getLastname();
+		final String birth = display.getBirth();
+		
+		if ( null == wicketUser ) {
+			wicketUser = new WicketUser();
+		}
+		
+		final Date userBirth;
+		try {
+			userBirth = UserContainerPresenter.STANDARD_DATE_FORMAT.parse(birth);
+		} catch (Exception e) {
+			display.setErrorMessageBirth("The birth date is wrong.");
+			return;
+		}
+		
+		if ( firstname.isEmpty() ) {
+			display.setErrorMessageFirstname("The lastname is empty.");
+			return;
+		}
+		
+		if ( lastname.isEmpty() ) {
+			display.setErrorMessageLastname("The firstname is empty.");
+			return;
+		}
+		
+		wicketUser.setBirth(userBirth);
+		wicketUser.setFirstname(firstname);
+		wicketUser.setLastname(lastname);
+		
+		eventBus.fireEvent(new UserChangedEvent(wicketUser));
+		
+	}
+
+	public void cancel_action() {
+		eventBus.fireEvent(new UserChangedEvent(null));
+	}
+}
+}}}
+
+To display all users, we need a presenter.
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class AllUserPresenter extends WicketPresenter<AllUserPresenter.Display> {
+
+	private final List<WicketUser> users = new ArrayList<WicketUser>();
+	private WicketUser selectedUser;
+
+	@Inject
+	public AllUserPresenter(Display display, EventBus eventBus) {
+		super(display, eventBus);
+		fetchUsers();
+		bind();
+		display.setPresenter(this);
+	}
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -186888559414222126L;
+
+	public interface Display extends WicketDisplay<AllUserPresenter> {
+
+		void setSelectedUser(WicketUser selectedUser);
+
+		void setErrorMessage(String string);
+
+		void setWicketusers(List<WicketUser> users);
+
+		void clearSelection();
+
+	}
+
+	public void refreshDisplay() {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	protected void onBind() {
+
+		registerHandler(eventBus.addHandler(EditUserEvent.TYPE, new EditUserEventHandler() {
+
+			public void onEditUserEvent(EditUserEvent event) {
+				if (null == event.getUser()) {
+					selectedUser = null;
+				}
+			}
+		}));
+
+		registerHandler(eventBus.addHandler(UserChangedEvent.TYPE, new UserChangedEventHandler() {
+
+			public void onShowAllUserEvent(UserChangedEvent event) {
+
+				if (null != selectedUser) {
+					users.remove(selectedUser);
+				}
+
+				WicketUser wicketUser = event.getWicketUser();
+
+				if (null != wicketUser) {
+
+					users.add(wicketUser);
+					display.setWicketusers(users);
+					selectedUser = wicketUser;
+					display.setSelectedUser(selectedUser);
+				}
+
+				eventBus.fireEvent(new PresenterRevealedEvent(AllUserPresenter.this));
+			}
+		}));
+
+	}
+
+	public void userSelected_action(int index) {
+		
+		if ( index < 0 ) {
+			display.clearSelection();
+			return;
+		}
+		selectedUser = users.get(index);
+		System.out.println("selectedUser: " + selectedUser.getFirstname());
+	}
+
+	public void editUser_action() {
+		if (null == selectedUser) {
+			display.setErrorMessage("Please select a user.");
+			return;
+		}
+
+		eventBus.fireEvent(new EditUserEvent(selectedUser));
+	}
+
+	public void removeUser_action() {
+		if (null == selectedUser) {
+			display.setErrorMessage("Please select a user.");
+			return;
+		}
+
+		users.remove(selectedUser);
+		selectedUser = null;
+		display.setWicketusers(users);
+	}
+
+	@Override
+	protected void onUnbind() {
+		// TODO Auto-generated method stub
+
+	}
+
+	private void fetchUsers() {
+		// TODO Auto-generated method stub
+
+	}
+}
+}}}
+
+One Presenter for the navigation
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public final class NavigationPresenter extends WicketPresenter<NavigationPresenter.Display> {
+		
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -3579400461775478562L;
+
+	@Inject
+	public NavigationPresenter(Display display, EventBus eventBus) {
+		super(display, eventBus);	
+		bind();
+		display.setPresenter(this);
+	}
+
+	public interface Display extends WicketDisplay<NavigationPresenter> {
+
+	}
+
+	public void refreshDisplay() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	protected void onBind() {
+
+	}
+
+	@Override
+	protected void onUnbind() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	public void showAllUsers_action() {		
+		eventBus.fireEvent(new UserChangedEvent(null));
+	}
+
+	public void createNewUser_action() {
+		eventBus.fireEvent(new EditUserEvent(null));
+	}
+}
+}}}
+
+We need a container presenter. He can easily manage presenter. E.g. Views can be placed on a PresenterRevealedEvent for viewing.
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class UserContainerPresenter extends WicketContainerPresenter<UserContainerPresenter.Display> {
+	
+	public static final SimpleDateFormat STANDARD_DATE_FORMAT = new SimpleDateFormat("yyyy/mm/dd");
+	
+	@Inject
+	public UserContainerPresenter(Display display, EventBus eventBus, AllUserPresenter allUserPresenter, EditUserPresenter userPresenter) {
+		super(display, eventBus, allUserPresenter, userPresenter);
+
+		display.addComponent(allUserPresenter.getDisplay().asComponent());
+		display.addComponent(userPresenter.getDisplay().asComponent());
+		showPresenter(allUserPresenter);
+		
+		bind();
+		display.setPresenter(this);
+	}
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+
+	public interface Display extends WicketContainerDisplay<UserContainerPresenter> {
+
+	}
+
+	public void refreshDisplay() {
+		// TODO Auto-generated method stub
+
+	}
+}
+}}}
+
+= Views and markups= 
+For each presenter, we need a view and markups. You can also encapsulates the logic for a view into multiple presenters.
+
+All views implement their presenter display interfaces
+
+View for the EditUserPresenter
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class EditUserView extends Panel implements EditUserPresenter.Display{
+	
+	public static final String VIEW_ID = "panelEditUserView";
+	public static final String ID_LABEL_TITLE = VIEW_ID+"LabelTitle";
+	
+	public static final String ID_FORM = VIEW_ID+"Form";
+	public static final String ID_FORM_LABEL_FIRSTNAME = VIEW_ID+"FormLabelFirstname";
+	public static final String ID_FORM_LABEL_LASTNAME = VIEW_ID+"FormLabelLastname";
+	public static final String ID_FORM_LABEL_BIRTH = VIEW_ID+"FormLabelBirth";
+	
+	public static final String ID_FORM_LABEL_ERROR_FIRSTNAME = VIEW_ID+"FormLabelErrorFirstname";
+	public static final String ID_FORM_LABEL_ERROR_LASTNAME = VIEW_ID+"FormLabelErrorLastname";
+	public static final String ID_FORM_LABEL_ERROR_BIRTH = VIEW_ID+"FormLabelErrorBirth";
+	
+	public static final String ID_FORM_TEXTFIELD_FIRSTNAME = VIEW_ID+"FormTextfieldFirstname";
+	public static final String ID_FORM_TEXTFIELD_LASTNAME = VIEW_ID+"FormTextfieldLastname";
+	public static final String ID_FORM_TEXTFIELD_BIRTH = VIEW_ID+"FormTextfieldBirth";
+	public static final String ID_FORM_BUTTON_CANCEL = VIEW_ID+"FormCancelLink"; 
+		
+	private EditUserPresenter presenter;
+	private Label labelTitle;
+	private Label labelFormFirstname;
+	private Label labelFormLastname;
+	private Label labelFormBirth;	
+	private Label labelFormErrorFirstname;
+	private Label labelFormErrorLastname;
+	private Label labelFormErrorBirth;
+	private Link<String> formCancelLink;
+	private Form<ValueMap> form;
+	private CompoundPropertyModel<ValueMap> compundedPropertyModel;
+
+	public EditUserView() {
+		super(VIEW_ID);
+		labelTitle = new Label(ID_LABEL_TITLE,"Edit user");
+		add(labelTitle);
+		compundedPropertyModel = new CompoundPropertyModel<ValueMap>(new ValueMap());
+		form = new Form<ValueMap>(ID_FORM,compundedPropertyModel) {
+
+			/**
+			 * 
+			 */
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void onSubmit() {
+				hideErrorMessages();
+				presenter.save_action();
+			}
+			
+		};
+		add(form);
+		
+		labelFormFirstname = new Label(ID_FORM_LABEL_FIRSTNAME,"Firstname");
+		form.add(labelFormFirstname);
+		
+		labelFormLastname = new Label(ID_FORM_LABEL_LASTNAME,"Lastname");
+		form.add(labelFormLastname);
+		
+		labelFormBirth = new Label(ID_FORM_LABEL_BIRTH,"Birth yyyy/mm/dd");
+		form.add(labelFormBirth);	
+		
+		labelFormErrorBirth = new Label(ID_FORM_LABEL_ERROR_BIRTH);
+		form.add(labelFormErrorBirth);
+		
+		labelFormErrorFirstname = new Label(ID_FORM_LABEL_ERROR_FIRSTNAME);
+		form.add(labelFormErrorFirstname);
+		
+		labelFormErrorLastname = new Label(ID_FORM_LABEL_ERROR_LASTNAME);		
+		form.add(labelFormErrorLastname);
+		
+		hideErrorMessages();
+		
+		form.add(new TextField<String>(ID_FORM_TEXTFIELD_FIRSTNAME).setType(String.class));
+		
+		form.add(new TextField<String>(ID_FORM_TEXTFIELD_LASTNAME).setType(String.class));
+		
+		form.add(new TextField<String>(ID_FORM_TEXTFIELD_BIRTH).setType(String.class));
+				
+		formCancelLink = new Link<String>(ID_FORM_BUTTON_CANCEL) {
+
+			/**
+			 * 
+			 */
+			private static final long serialVersionUID = -632482484843710146L;
+
+			@Override
+			public void onClick() {				
+				presenter.cancel_action();
+			}
+			
+		};
+		add(formCancelLink);
+	}
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -4516768116171747455L;
+
+	public Component asComponent() {
+		return this;
+	}
+
+	public void setPresenter(EditUserPresenter presenter) {
+		this.presenter = presenter;
+	
+	}
+
+	public String getFirstname() {
+		return (String)form.getModelObject().get(ID_FORM_TEXTFIELD_FIRSTNAME);
+	}
+
+	public String getLastname() {
+		return (String)form.getModelObject().get(ID_FORM_TEXTFIELD_LASTNAME);
+	}
+
+	public String getBirth() {
+		return (String)form.getModelObject().get(ID_FORM_TEXTFIELD_BIRTH);
+	}
+
+	public void setWicketUser(WicketUser wicketUser) {
+		form.getModelObject().put(ID_FORM_TEXTFIELD_FIRSTNAME, wicketUser.getFirstname());
+		form.getModelObject().put(ID_FORM_TEXTFIELD_LASTNAME, wicketUser.getLastname());
+		form.getModelObject().put(ID_FORM_TEXTFIELD_BIRTH, UserContainerPresenter.STANDARD_DATE_FORMAT.format(wicketUser.getBirth()));	
+		hideErrorMessages();
+	}
+
+	public void clearForm() {
+		form.getModelObject().put(ID_FORM_TEXTFIELD_FIRSTNAME, "");
+		form.getModelObject().put(ID_FORM_TEXTFIELD_LASTNAME, "");
+		form.getModelObject().put(ID_FORM_TEXTFIELD_BIRTH, "");		
+		
+		hideErrorMessages();
+	}
+	
+	
+
+	public void setErrorMessageBirth(String message) {
+		labelFormErrorBirth.setDefaultModel(Model.of(message));
+		labelFormErrorBirth.setVisible(true);
+	}
+
+	public void setErrorMessageFirstname(String message) {
+		labelFormErrorFirstname.setDefaultModel(Model.of(message));
+		labelFormErrorFirstname.setVisible(true);
+	}
+
+	public void setErrorMessageLastname(String message) {
+		labelFormErrorLastname.setDefaultModel(Model.of(message));
+		labelFormErrorLastname.setVisible(true);
+	}
+
+	private void hideErrorMessages() {
+		labelFormErrorLastname.setVisible(false);
+		labelFormErrorFirstname.setVisible(false);
+		labelFormErrorBirth.setVisible(false);
+	}
+	
+}
+}}}
+
+Markup
+
+{{{
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Insert title here</title>
+</head>
+<body>
+	<wicket:panel>
+		<span wicket:id="panelEditUserViewLabelTitle" id="panelTitle">Title</span>
+		<form wicket:id="panelEditUserViewForm" id = "panelEditUserViewForm">
+			<span wicket:id="panelEditUserViewFormLabelFirstname">this text will be replaced</span>
+			<p>
+				<input type="text" wicket:id="panelEditUserViewFormTextfieldFirstname"/> 
+				<span wicket:id="panelEditUserViewFormLabelErrorFirstname" style="color:#ff3333">this text will be replaced</span>
+			</p>
+			<span wicket:id="panelEditUserViewFormLabelLastname">this text will be replaced</span>
+			<p>
+				<input type="text" wicket:id="panelEditUserViewFormTextfieldLastname"/> 
+				<span wicket:id="panelEditUserViewFormLabelErrorLastname" style="color:#ff3333">this text will be replaced</span>
+			</p>
+			<span wicket:id="panelEditUserViewFormLabelBirth">this text will be replaced</span>
+			<p>
+				<input type="text" wicket:id="panelEditUserViewFormTextfieldBirth"/> 
+				<span wicket:id="panelEditUserViewFormLabelErrorBirth" style="color:#ff3333">this text will be replaced</span>
+			</p>
+			<p> 
+				<input type = "submit" value = "Submit" id="formsubmit"/>
+			</p>
+		</form>
+		<a href="#" wicket:id="panelEditUserViewFormCancelLink">Cancel</a><br><br>		
+	</wicket:panel>
+</body>
+</html>
+}}}
+
+View for AllUserPresenter
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class AllUserView extends Panel implements AllUserPresenter.Display {
+
+	public static final String VIEW_ID = "panelAllUserView";
+	public static final String ID_LABEL_TITLE = VIEW_ID + "LabelTitle";
+	public static final String ID_LABEL_SELECTED_USER = VIEW_ID + "LabelSelectedUser";
+	public static final String ID_USER_LIST_CHOISE = VIEW_ID + "ListChoiseUser";
+	public static final String ID_USER_FORM = VIEW_ID + "Form";
+	
+	public static final String ID_FORM_BUTTON_EDIT_USER = ID_USER_FORM + "ButtonEdit";
+	public static final String ID_FORM_BUTTON_REMOVE_USER = ID_USER_FORM + "ButtonRemove";
+	
+	private AllUserPresenter presenter;
+	private Label labelTitle;
+	private Label labelSelectedUSer;
+	private ListChoice<String> listChoise;
+	private Form<Void> form;
+	
+	
+	private String selectedUser = "There are no user";
+	private List<String> users = new ArrayList<String>();
+
+	public AllUserView() {
+		super(VIEW_ID);
+		labelTitle = new Label(ID_LABEL_TITLE, "All user");
+		add(labelTitle);
+		
+		form = new Form<Void>(ID_USER_FORM) {
+
+			/**
+			 * 
+			 */
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void onSubmit() {
+				System.out.println(selectedUser);
+			}
+			
+		};
+		add(form);
+		users.add("There are no user");
+		listChoise = new ListChoice<String>(ID_USER_LIST_CHOISE,new PropertyModel<String>(this, "selectedUser"),users);		
+		listChoise.setMaxRows(5);
+		
+		listChoise.add(new AjaxFormComponentUpdatingBehavior("onchange") {
+            protected void onUpdate(AjaxRequestTarget target) {
+                labelSelectedUSer.setDefaultModel(Model.of(selectedUser));
+                presenter.userSelected_action(listChoise.getChoices().indexOf(selectedUser));
+                target.addComponent(labelSelectedUSer);
+            }
+        });
+		
+		form.add(listChoise);
+		
+		labelSelectedUSer = new Label(ID_LABEL_SELECTED_USER, "There are no user");
+		labelSelectedUSer.setOutputMarkupId(true);
+		add(labelSelectedUSer);
+		form.add(new Button(ID_FORM_BUTTON_EDIT_USER,Model.of("edit")) {
+
+			@Override
+			public void onSubmit() {
+				presenter.editUser_action();
+			}
+			
+		});
+		
+		form.add(new Button(ID_FORM_BUTTON_REMOVE_USER,Model.of("remove")) {
+
+			@Override
+			public void onSubmit() {
+				presenter.removeUser_action();
+			}
+			
+		});
+	}
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 5786562678082317739L;
+
+	public Component asComponent() {
+		return this;
+	}
+
+	public void setPresenter(AllUserPresenter presenter) {
+		this.presenter = presenter;
+	}
+
+	public void setSelectedUser(WicketUser selectedUser) {
+		for (String user : users) {
+			if (selectedUser.getFirstname().equals(user)) {
+				this.selectedUser = user;
+				labelSelectedUSer.setDefaultModel(Model.of(this.selectedUser));
+			}
+		}
+	}
+
+	public void setErrorMessage(String string) {
+		// TODO Auto-generated method stub
+
+	}
+
+	public void setWicketusers(List<WicketUser> users) {
+		
+		listChoise.getChoices().clear();
+		final List<String> userNames = new ArrayList<String>();
+		for (int i = 0; i<users.size(); i++) {
+			userNames.add(users.get(i).getFirstname());
+			
+		}//1979/03/03
+		this.users = userNames;
+		listChoise.setChoices(this.users);
+		
+	}
+
+	public void clearSelection() {
+		selectedUser = null;
+	}
+  
+}
+}}}
+
+Markup
+
+{{{
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Insert title here</title>
+</head>
+<body>
+	<wicket:panel>
+		<div id="id="userContainerPanel">
+			<span wicket:id="panelAllUserViewLabelTitle">this text will be
+				replaced</span>
+		</div>
+
+		<form wicket:id="panelAllUserViewForm">
+			<p>
+				<select wicket:id="panelAllUserViewListChoiseUser"></select>
+			</p>
+			<input wicket:id="panelAllUserViewFormButtonEdit" type="submit" value="edit" />
+			<input wicket:id="panelAllUserViewFormButtonRemove" type="submit" value="remove" />
+
+		</form>
+		<div id="id="userContainerPanel">
+			<span wicket:id="panelAllUserViewLabelSelectedUser">no users
+				where selected</span>
+		</div>
+		
+	</wicket:panel>
+</body>
+</html>
+}}}
+
+Navigation View
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class NavigationView extends Panel implements NavigationPresenter.Display{
+	
+	private static final String VIEW_ID = "panelNavigationView";
+	private static final String ID_LINK_ALL_USERS = VIEW_ID+"ButtonLinkAllUsers";
+	private static final String ID_LINK_NEW_USER = VIEW_ID+"ButtonLinkNewUser";
+
+	private static final long serialVersionUID = 1L;
+	private NavigationPresenter presenter;
+	
+	private Link linkAllUsers;
+	private Link linkNewUser;
+	
+	public NavigationView() {
+		super(VIEW_ID);
+		initializeView();
+	}	
+	
+	public void initializeView() {			
+		linkAllUsers = new Link(ID_LINK_ALL_USERS) {
+			public void onClick() {
+				NavigationView.this.presenter.showAllUsers_action();
+			}
+		};
+		add(linkAllUsers);
+		
+		linkNewUser = new Link(ID_LINK_NEW_USER) {
+			public void onClick() {
+				NavigationView.this.presenter.createNewUser_action();
+			}
+		};
+		add(linkNewUser);
+	}
+	
+	public Component asComponent() {
+		return this;
+	}
+
+	public void setPresenter(NavigationPresenter presenter) {
+		this.presenter = presenter;
+	}
+}
+}}}
+
+Markup
+{{{
+<html
+	xmlns:wicket="http://wicket.apache.org/dtds.data/wicket-xhtml1.4-strict.dtd">
+<head>
+<title>Wicket Quickstart Archetype Homepage</title>
+</head>
+<body>
+	<wicket:panel>
+		<div id="panelNavigation">	
+			<a href="#" wicket:id="panelNavigationViewButtonLinkAllUsers">Show users</a><br><br>
+			<a href="#" wicket:id="panelNavigationViewButtonLinkNewUser">Create user</a>
+		</div>
+	</wicket:panel>
+</body>
+</html>
+}}}
+
+View for the UserContainer presenter
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class UserContainerView extends Panel implements UserContainerPresenter.Display {
+
+	public static final String VIEW_ID = "panelUserContainerView";
+	private UserContainerPresenter presenter;
+
+	public UserContainerView() {
+		super(VIEW_ID);
+	}
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 6100015125034775143L;
+
+	public void showComponent(final Component component) {
+		VisitComponent visitor = new VisitComponent();
+		UserContainerView.this.visitChildren(visitor);
+		component.setVisible(true);
+	}
+
+	public void addComponent(Component component) {
+		this.add(component);
+		component.setVisible(false);
+	}
+
+	public void removeComponent(Component component) {
+
+	}
+
+	public Component asComponent() {
+		return this;
+	}
+
+	public void setPresenter(UserContainerPresenter presenter) {
+		this.presenter = presenter;
+	}
+
+	private static class VisitComponent implements IVisitor<Component> {
+		public Object component(Component component) {
+			/**
+			 * Hide the visible compoenent. Its a workaround. If you have a better idea, you can write me an email to sk@pennychecker.com.
+			 */
+			if ( component instanceof WicketDisplay<?> ) {
+				component.setVisible(false);
+			}			
+			return IVisitor.CONTINUE_TRAVERSAL;
+		};
+	}
+
+}
+}}}
+
+Markup
+{{{
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Insert title here</title>
+</head>
+<body>
+<body>
+	<wicket:panel>
+		<div id="userContainerPanel" wicket:id="panelAllUserView"></div>
+		<div id="userContainerPanel" wicket:id="panelEditUserView"></div>
+	</wicket:panel>
+</body>
+</body>
+</html>
+}}}
+
+We still need a user.
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class WicketUser implements Serializable{
+	private String firstname;
+	private String lastname;
+	private Date birth;
+	public String getFirstname() {
+		return firstname;
+	}
+	public void setFirstname(String firstname) {
+		this.firstname = firstname;
+	}
+	
+	public String getLastname() {
+		return lastname;
+	}
+	public void setLastname(String lastname) {
+		this.lastname = lastname;
+	}
+	public Date getBirth() {
+		return birth;
+	}
+	public void setBirth(Date birth) {
+		this.birth = birth;
+	}
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((birth == null) ? 0 : birth.hashCode());
+		result = prime * result + ((firstname == null) ? 0 : firstname.hashCode());
+		result = prime * result + ((lastname == null) ? 0 : lastname.hashCode());
+		return result;
+	}
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		WicketUser other = (WicketUser) obj;
+		if (birth == null) {
+			if (other.birth != null)
+				return false;
+		} else if (!birth.equals(other.birth))
+			return false;
+		if (firstname == null) {
+			if (other.firstname != null)
+				return false;
+		} else if (!firstname.equals(other.firstname))
+			return false;
+		if (lastname == null) {
+			if (other.lastname != null)
+				return false;
+		} else if (!lastname.equals(other.lastname))
+			return false;
+		return true;
+	}
+	
+}
+}}}
+
+= GUICE configuration =
+
+See the Wicket and guice integretion at the top of the page.
+
+*web.xml*
+
+{{{
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<web-app xmlns="http://java.sun.com/xml/ns/j2ee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd"
+	version="2.4">
+	<!-- <display-name>wicketexample</display-name> <filter> <filter-name>wicket.wicketexample</filter-name> 
+		<filter-class>org.apache.wicket.protocol.http.WicketFilter</filter-class> 
+		<init-param> <param-name>applicationClassName</param-name> <param-value>com.pennychecker.WicketApplication</param-value> 
+		</init-param> </filter> <filter-mapping> <filter-name>wicket.wicketexample</filter-name> 
+		<url-pattern>/*</url-pattern> </filter-mapping> -->
+
+<!--
+
+  BEGIN
+  http://blog.yanivkessler.com/2010/05/wicket-and-guice-alternate-route.html?x=stackoverflow
+ 
+-->
+	<filter>
+		<filter-name>guiceFilter</filter-name>
+		<filter-class>com.google.inject.servlet.GuiceFilter</filter-class>
+	</filter>
+
+	<filter-mapping>
+		<filter-name>guiceFilter</filter-name>
+		<url-pattern>/*</url-pattern>
+	</filter-mapping>
+
+	<listener>
+		<listener-class>com.pennychecker.wicketexample.Bootstrap</listener-class>
+	</listener>
+	
+<!--
+
+  END
+  http://blog.yanivkessler.com/2010/05/wicket-and-guice-alternate-route.html?x=stackoverflow
+ 
+-->
+</web-app>
+}}}
+
+*Bootstrap.java*
+{{{
+public final class Bootstrap extends GuiceServletContextListener {
+	@Override
+	protected Injector getInjector() {
+		return Guice.createInjector(new MvpModule(), new WebModule());
+	}
+}
+}}}
+
+*WicketGuiceFilter*
+{{{
+@Singleton
+public class WicketGuiceFilter extends WicketFilter {
+
+	@Inject
+	private Provider<WebApplication> appsProvider;
+
+	@Override
+	protected IWebApplicationFactory getApplicationFactory() {
+		return new IWebApplicationFactory() {
+			public WebApplication createApplication(WicketFilter filter) {
+				return appsProvider.get();
+			}
+		};
+	}
+}
+}}}
+
+*WicketGuiceAppProvider*
+
+{{{
+public class WicketGuiceAppProvider implements Provider<WebApplication> {
+
+	private final Injector injector;
+
+	@Inject
+	public WicketGuiceAppProvider(Injector injector) {
+		this.injector = injector;
+	}
+
+	public WebApplication get() {
+		WicketApplication app = new WicketApplication(injector);
+		return app;
+	}
+}
+
+}}}
+
+*EventBusProvider*
+
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class EventBusProvider implements Provider<EventBus>{
+
+	public EventBus get() {
+		return new DefaultEventBus();
+	}
+
+}
+}}}
+
+*WebModule*
+{{{
+public class WebModule extends ServletModule {
+
+	@Override
+	protected void configureServlets() {
+		bind(WebApplication.class).toProvider(WicketGuiceAppProvider.class);
+
+		// avoids
+		// "Error initializing WicketFilter - you have no <filter-mapping> element..."
+		// IllegalArgumentException
+		Map<String, String> params = new HashMap<String, String>();
+		params.put(WicketFilter.FILTER_MAPPING_PARAM, "/*");
+
+		filter("/*").through(WicketGuiceFilter.class, params);
+	}
+}
+}}}
+
+*MvpModule*
+{{{
+public class MvpModule extends AbstractModule{
+
+	
+	@Override
+	protected void configure() {
+		
+		bind(EventBus.class).toProvider(EventBusProvider.class).in(Singleton.class);
+		
+		bind(NavigationPresenter.Display.class).to(NavigationView.class);
+		bind(NavigationPresenter.class).in(Singleton.class);
+		
+		bind(UserContainerPresenter.Display.class).to(UserContainerView.class);
+		bind(UserContainerPresenter.class).in(Singleton.class);
+		
+		bind(AllUserPresenter.Display.class).to(AllUserView.class);
+		bind(AllUserPresenter.class).in(Singleton.class);
+		
+		bind(EditUserPresenter.Display.class).to(EditUserView.class);
+		bind(EditUserPresenter.class).in(Singleton.class);
+	}
+
+}
+}}}
+
+= Application settings =
+
+*WicketApplication*
+{{{
+public class WicketApplication extends WebApplication {
+
+	private transient Injector injector;
+
+	public WicketApplication(Injector injector) {
+		this.injector = injector;
+	}
+
+	/**
+	 * @see org.apache.wicket.Application#getHomePage()
+	 */
+	public Class<HomePage> getHomePage() {
+		return HomePage.class;
+	}
+
+	@Override
+	protected void init() {
+		addComponentInstantiationListener(new GuiceComponentInjector(this,injector));
+	}
+
+}
+}}}
+
+*embedded jetty config*
+{{{
+public class Start {
+
+	public static void main(String[] args) throws Exception {
+		Server server = new Server();
+		SocketConnector connector = new SocketConnector();
+		
+		// Set some timeout options to make debugging easier.
+		connector.setMaxIdleTime(1000 * 60 * 60);
+		connector.setSoLingerTime(-1);
+		connector.setPort(8080);
+		server.setConnectors(new Connector[] { connector });
+
+		WebAppContext bb = new WebAppContext();
+		bb.setServer(server);
+		bb.setContextPath("/");
+		bb.setWar("src/main/webapp");
+
+		server.addHandler(bb);
+
+		try {
+			System.out.println(">>> STARTING EMBEDDED JETTY SERVER, PRESS ANY KEY TO STOP");
+			server.start();
+			System.in.read();
+			System.out.println(">>> STOPPING EMBEDDED JETTY SERVER"); 
+            // while (System.in.available() == 0) {
+			//   Thread.sleep(5000);
+			// }
+			server.stop();
+			server.join();
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.exit(100);
+		}
+	}
+}
+}}}
+
+*Hompage view*
+{{{
+/**
+ * @author Steffen Kaempke
+ */
+public class HomePage extends WebPage {
+
+	private static final long serialVersionUID = 1L;
+	private Injector injector;
+
+	public HomePage() {
+		final NavigationPresenter navigationPresenter = injector.getInstance(NavigationPresenter.class);
+		add(navigationPresenter.getDisplay().asComponent());
+		
+		final UserContainerPresenter userContainerPresenter = injector.getInstance(UserContainerPresenter.class);
+		add(userContainerPresenter.getDisplay().asComponent());
+		
+		ResourceReference cssRef = new ResourceReference(HomePage.class, "main.css");
+		add(CSSPackageResource.getHeaderContribution(cssRef));
+	}
+
+	@Inject
+	public void setInjector(Injector injector) {
+		this.injector = injector;
+	}
+}
+}}}
+
+*Homepage markup*
+{{{
+<html
+	xmlns:wicket="http://wicket.apache.org/dtds.data/wicket-xhtml1.4-strict.dtd">
+<head>
+<link rel="stylesheet" type="text/css" href="main.css" />
+<title>Wicket Quickstart Archetype Homepage</title>
+</head>
+<body>
+	<div id="display">
+		<div id="main">
+			<div wicket:id="panelNavigationView" class="panelNavigationView"></div>
+			<div wicket:id="panelUserContainerView"
+				class="panelUserContainerView"></div>
+		</div>
+	</div>
+
+</body>
+</html>
+}}}
+
+*main.css*
+{{{
+@CHARSET "ISO-8859-1";
+#panelNavigationView {
+	background-color:black;
+}
+
+.panelNavigationView {
+	width:250px;
+	background-color:#95A7B6;
+	float:left;
+	border: 1px solid #777777;
+}
+
+.panelUserContainerView {
+	width:550px;
+	background-color:#D3C2AB;
+	border: 1px solid #777777;
+}
+
+#main {
+	width:900px;
+	height:650px;	
+	text-align:left;	
+}
+
+#display {
+	text-align:center;	
+}
+
+#panelNavigation{
+	height:400px;
+}
+
+#userContainerPanel{
+	height:400px;
+}
+}}}
+
+= Download this example =
+
+You can check out the source directly as a Netbeans project [http://code.google.com/p/pennychecker-presenter/source/checkout svn src]
