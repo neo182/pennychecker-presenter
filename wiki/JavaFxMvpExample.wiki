@@ -1,13 +1,779 @@
-#summary One-sentence summary of this page.
+#summary Model View Presenter java fx 2.0 application
 
-= Introduction =
-
-Add your content here.
+[http://code.google.com/p/pennychecker-presenter/wiki/GettingStarted GettingStarted]
 
 
 = Details =
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+We create a simple user management. Users can be created, edited or deleted. In addition, all users are displayed in a list.
+
+= Events =
+
+We need two events. An event when a user's data have been changed and an event to announce that a new user to be created or edited.
+
+{{{
+public interface EditUserEventHandler extends EventHandler {
+    void onEditUserEvent(EditUserEvent event);
+}
+
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class EditUserEvent extends Event<EditUserEventHandler> {
+
+    public final static Type<EditUserEventHandler> TYPE = new Type<EditUserEventHandler>();
+    private final User user;
+
+    public EditUserEvent(User user) {
+        this.user = user;
+    }
+
+    @Override
+    public Type<EditUserEventHandler> getAssociatedType() {
+        return TYPE;
+    }
+
+    @Override
+    protected void dispatch(EditUserEventHandler h) {
+        h.onEditUserEvent(this);
+    }
+
+    public User getUser() {
+        return user;
+    }
+}
+}}}
+
+{{{
+public interface UserChangedEventHandler extends EventHandler {
+    void onUserChangedEvent(UserChangedEvent event);
+}
+
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class UserChangedEvent extends Event<UserChangedEventHandler> {
+
+    public final static Type<UserChangedEventHandler> TYPE = new Type<UserChangedEventHandler>();
+    private final User user;
+
+    public UserChangedEvent(User user) {
+        this.user = user;
+    }
+
+    @Override
+    public Type<UserChangedEventHandler> getAssociatedType() {
+        return TYPE;
+    }
+
+    @Override
+    protected void dispatch(UserChangedEventHandler h) {
+        h.onUserChangedEvent(this);
+    }
+
+    public User getUser() {
+        return user;
+    }
+}
+}}}
+
+= Presenter =
+
+We need a presenter for the processing of a user.
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class EditUserPresenter extends FxPresenter<EditUserPresenter.Display> {
+
+    private User selectedUser;
+    private final UserRepository userRepository;
+
+    /**
+     * 
+     * @param display
+     * @param eventBus
+     * @param userRepository  
+     */
+    @Inject
+    public EditUserPresenter(Display display, EventBus eventBus, UserRepository userRepository) {
+        super(display, eventBus);
+        assert null != userRepository;
+        this.userRepository = userRepository;
+        bind();
+    }
+
+    @Override
+    protected void onBind() {
+
+        registerHandler(eventBus.addHandler(EditUserEvent.TYPE, new EditUserEventHandler() {
+
+            public void onEditUserEvent(EditUserEvent event) {
+                selectedUser = event.getUser();
+
+                if (null == selectedUser) {
+                    display.clearForm();
+                } else {
+                    display.setUser(selectedUser);
+                }
+
+                eventBus.fireEvent(new PresenterRevealedEvent(EditUserPresenter.this));
+            }
+        }));
+
+        display.getSaveButton().addEventHandler(ActionEvent.ACTION, new EventHandler<ActionEvent>() {
+
+            public void handle(ActionEvent event) {
+                saveUser();
+            }
+        });
+
+        display.getCancelButton().addEventHandler(ActionEvent.ACTION, new EventHandler<ActionEvent>() {
+
+            public void handle(ActionEvent event) {
+                display.clearForm();
+                eventBus.fireEvent(new UserChangedEvent(null));
+            }
+        });
+    }
+
+    @Override
+    protected void onUnbind() {
+    }
+
+    public void refreshDisplay() {
+    }
+
+    public interface Display extends FxDisplay {
+
+        Node getSaveButton();
+
+        Node getCancelButton();
+
+        String getFirstname();
+
+        String getLastName();
+
+        public void setErrorMessage(String string);
+
+        public void clearForm();
+
+        public void setUser(User user);
+
+        public void setWarningMessage(String string);
+    }
+
+    private void saveUser() {
+        assert null != display.getFirstname();
+        assert null != display.getLastName();
+        final String firstname = display.getFirstname();
+        final String lastname = display.getLastName();
+
+        if (firstname.isEmpty()) {
+            display.setWarningMessage("Please insert the firstname.");
+            return;
+        }
+
+        if (lastname.isEmpty()) {
+            display.setWarningMessage("Please insert the lastname.");
+            return;
+        }
+        final User user;
+
+        if (null == selectedUser) {
+            user = new User(firstname, lastname);
+        } else {
+            user = selectedUser;
+            user.setFirstname(firstname);
+            user.setLastname(lastname);
+        }
+        try {
+            userRepository.save(user);
+        } catch (Exception ex) {
+            Logger.getLogger(EditUserPresenter.class.getName()).log(Level.SEVERE, null, ex);
+            display.setErrorMessage("Could not save the user.");
+            return;
+        }
+
+
+        selectedUser = null;
+        display.clearForm();
+
+        eventBus.fireEvent(new UserChangedEvent(user));
+    }
+}
+}}}
+
+To display all users, we need a presenter.
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class AllUserPresenter extends FxPresenter<AllUserPresenter.Display> {
+
+    private final List<User> users = new ArrayList<User>();
+    private User selectedUser;
+    private final UserRepository userRepository;
+
+    /**
+     * 
+     * @param display
+     * @param eventBus
+     * @param userRepository 
+     */
+    @Inject
+    public AllUserPresenter(Display display, EventBus eventBus, UserRepository userRepository) {
+        super(display, eventBus);
+        assert null != userRepository;
+        this.userRepository = userRepository;
+        bind();
+        fetchUsers();
+    }
+
+    @Override
+    protected void onBind() {
+
+        display.getUserList().addEventHandler(MouseEvent.MOUSE_CLICKED, new EventHandler<MouseEvent>() {
+
+            public void handle(MouseEvent event) {
+                int index = display.getSelectedUserIndex();
+                if (index < 0) {
+                    return;
+                }
+                selectedUser = users.get(index);
+                display.setSelectedUser(selectedUser);
+            }
+        });
+
+        display.getUserList().addEventHandler(MouseEvent.MOUSE_CLICKED, new EventHandler<MouseEvent>() {
+
+            public void handle(MouseEvent event) {
+                if (event.getClickCount() == 2) {
+                    int index = display.getSelectedUserIndex();
+                    if (index < 0) {
+                        return;
+                    }
+                    final User selectedUser = users.get(index);
+                    display.setSelectedUser(selectedUser);
+
+                    eventBus.fireEvent(new EditUserEvent(selectedUser));
+                }
+            }
+        });
+
+        registerHandler(eventBus.addHandler(UserChangedEvent.TYPE, new UserChangedEventHandler() {
+
+            public void onUserChangedEvent(UserChangedEvent event) {
+
+                User user = event.getUser();
+
+                if (null == user) {
+                    firePresenterRevealedEvent();
+                    return;
+                }
+
+                if (!users.contains(user)) {
+                    users.add(user);
+                }
+
+                selectedUser = user;
+                display.setSelectedUser(selectedUser);
+                display.setUsers(users);
+                display.setSelection(users.indexOf(user));
+                firePresenterRevealedEvent();
+            }
+        }));
+
+        display.getAddUserButton().addEventHandler(ActionEvent.ACTION, new EventHandler<ActionEvent>() {
+
+            public void handle(ActionEvent event) {
+                eventBus.fireEvent(new EditUserEvent(null));
+            }
+        });
+
+        display.getEditUserButton().addEventHandler(ActionEvent.ACTION, new EventHandler<ActionEvent>() {
+
+            public void handle(ActionEvent event) {
+                if (null == selectedUser) {
+                    display.setWarning("Please select a user.");
+                    return;
+                }
+
+                eventBus.fireEvent(new EditUserEvent(selectedUser));
+            }
+        });
+
+        display.getRemoveUserButton().addEventHandler(ActionEvent.ACTION, new EventHandler<ActionEvent>() {
+
+            public void handle(ActionEvent event) {
+                if (null == selectedUser) {
+                    display.setWarning("Select a user.");
+                    return;
+                }
+                users.remove(selectedUser);
+                selectedUser = null;
+                display.clearSelections();
+                display.setUsers(users);
+                display.setSelectedUser(selectedUser);
+            }
+        });
+    }
+
+    @Override
+    protected void onUnbind() {
+    }
+
+    public void refreshDisplay() {
+    }
+
+    private void fetchUsers() {
+        users.clear();
+        final List<User> userList;
+        try {
+            userList = userRepository.finaAll();
+        } catch (Exception ex) {
+            display.setError("Could not fetch users.");
+            return;
+        }
+
+        display.setUsers(userList);
+        display.clearSelections();
+    }
+
+    public interface Display extends FxDisplay {
+
+        Node getUserList();
+
+        Node getAddUserButton();
+
+        Node getEditUserButton();
+
+        Node getRemoveUserButton();
+
+        public int getSelectedUserIndex();
+
+        public void setSelectedUser(User selectedUser);
+
+        public void setUsers(List<User> users);
+
+        public void clearSelections();
+
+        public void setSelection(int index);
+
+        public void setWarning(String string);
+
+        public void setError(String string);
+    }
+
+    public void firePresenterRevealedEvent() {
+        eventBus.fireEvent(new PresenterRevealedEvent(AllUserPresenter.this));
+    }
+}
+}}}
+
+We need a container presenter. He can easily manage presenter. E.g. Views can be placed on a PresenterRevealedEvent for viewing.
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public class UserContainerPresenter extends FxContainerPresenter<UserContainerPresenter.Display> {
+
+    /**
+     * 
+     * @param display
+     * @param eventBus
+     * @param editUserPresenter
+     * @param allUserPresenter 
+     */
+    @Inject
+    public UserContainerPresenter(Display display, EventBus eventBus, EditUserPresenter editUserPresenter, AllUserPresenter allUserPresenter) {
+        super(display, eventBus, editUserPresenter, allUserPresenter);
+
+        assert null != editUserPresenter;
+        assert null != allUserPresenter;
+
+        display.addParent(allUserPresenter.getDisplay().asParent());
+        display.addParent(editUserPresenter.getDisplay().asParent());
+
+        showPresenter(allUserPresenter);
+        bind();
+    }
+
+    public void refreshDisplay() {
+    }
+
+    public interface Display extends FxContainerDisplay {
+    }
+}
+}}}
+
+= Views = 
+For each presenter, we need a view. You can also encapsulates the logic for a view into multiple presenters.
+
+All views implement their presenter display interfaces
+
+View for the EditUserPresenter
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class EditUserView extends Parent implements EditUserPresenter.Display {
+
+    private TextBox textBoxFirstname;
+    private TextBox textBoxLastname;
+    private Label labelFirstname;
+    private Label labelLastname;
+    private Button buttonSave;
+    private Button buttonCancel;
+    private VBox vBox;
+
+    public EditUserView() {
+        initialize();
+    }
+
+    public Node getSaveButton() {
+        return buttonSave;
+    }
+
+    public Node getCancelButton() {
+        return buttonCancel;
+    }
+
+    public String getFirstname() {
+        return textBoxFirstname.getText();
+    }
+
+    public String getLastName() {
+        return textBoxLastname.getText();
+    }
+
+    public void setErrorMessage(String string) {
+    }
+
+    public void clearForm() {
+        textBoxFirstname.setText("");
+        textBoxLastname.setText("");
+    }
+
+    public void setUser(User user) {
+        if (null == user) {
+            textBoxFirstname.setText("");
+            textBoxLastname.setText("");
+        } else {
+            textBoxFirstname.setText(user.getFirstname());
+            textBoxLastname.setText(user.getLastname());
+        }
+    }
+
+    public void setWarningMessage(String string) {
+        
+    }
+
+    public Parent asParent() {
+        return this;
+    }
+
+    private void initialize() {
+        textBoxFirstname = new TextBox();
+        textBoxLastname = new TextBox();
+        labelFirstname = new Label("Firstname");
+        labelLastname = new Label("Lastname");
+        buttonCancel = new Button("Cancel");
+        buttonSave = new Button("Save");
+        vBox = new VBox(10);
+        vBox.getChildren().addAll(labelFirstname, textBoxFirstname, labelLastname, textBoxLastname, buttonCancel, buttonSave);
+        this.getChildren().add(vBox);
+        vBox.setPrefSize(500, 500);
+        vBox.setStyle("-fx-background-color: #FBFFDB");
+        
+    }
+}
+}}}
+
+View for AllUserPresenter
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class AllUserView extends Parent implements AllUserPresenter.Display {
+
+    private Label labelFirstname;
+    private Label textLabelFirstname;
+    private Label labelLastname;
+    private Label textLabelLastname;
+    private ListView<String> userListView;
+    private Button buttonAddUser;
+    private Button buttonEditUser;
+    private Button buttonRemoveUser;
+    private VBox vBox;
+    private HBox userFirstnameBoxH;
+    private HBox userLastnameBoxH;
+    private HBox buttonBoxH;
+
+    public AllUserView() {
+        initialize();
+    }
+
+    public Node getUserList() {
+        return userListView;
+    }
+
+    public Node getAddUserButton() {
+        return buttonAddUser;
+    }
+
+    public Node getEditUserButton() {
+        return buttonEditUser;
+    }
+
+    public Node getRemoveUserButton() {
+        return buttonRemoveUser;
+    }
+
+    public int getSelectedUserIndex() {
+        return userListView.getSelectionModel().getSelectedIndex();
+    }
+
+    public void setSelectedUser(User selectedUser) {
+        if (null == selectedUser) {
+            textLabelFirstname.setText(" - ");
+            textLabelLastname.setText(" - ");
+        } else {
+            textLabelFirstname.setText(selectedUser.getFirstname());
+            textLabelLastname.setText(selectedUser.getLastname());
+        }
+    }
+
+    public void setUsers(List<User> users) {
+        final ObservableList<String> observableList = new ObservableListWrapper<String>(new ArrayList<String>());
+
+        for (int i = 0; i < users.size(); i++) {
+            final User user = users.get(i);
+            observableList.add(i, user.getFirstname() + " " + user.getLastname());
+        }
+
+        userListView.setItems(observableList);
+    }
+
+    public void clearSelections() {
+        userListView.getSelectionModel().clearSelection();
+    }
+
+    public void setSelection(int index) {
+        userListView.getSelectionModel().select(index);
+    }
+
+    public void setWarning(String string) {
+    }
+
+    public void setError(String string) {
+    }
+
+    public Parent asParent() {
+        return this;
+    }
+
+    private void initialize() {
+        labelFirstname = new Label("Firstname");
+        labelLastname = new Label("Lastname");
+        textLabelFirstname = new Label(" - ");
+        textLabelLastname = new Label(" - ");
+        userListView = new ListView<String>(new ObservableListWrapper<String>(new ArrayList<String>()));
+        buttonAddUser = new Button("Add");
+        buttonEditUser = new Button("Edit");
+        buttonRemoveUser = new Button("Remove");
+        buttonBoxH = new HBox(10);
+        buttonBoxH.getChildren().addAll(buttonRemoveUser,buttonEditUser,buttonAddUser);
+        userFirstnameBoxH = new HBox(5);
+        userLastnameBoxH = new HBox(5);
+        userFirstnameBoxH.getChildren().addAll(labelFirstname, textLabelFirstname);
+        userLastnameBoxH.getChildren().addAll(labelLastname, textLabelLastname);
+        vBox = new VBox(10);
+        vBox.setPrefSize(500, 500);
+        vBox.setStyle("-fx-background-color: #FBFFDB");
+        vBox.getChildren().addAll(userFirstnameBoxH, userLastnameBoxH, userListView, buttonBoxH);
+        this.getChildren().add(vBox);
+    }
+}
+}}}
+
+View for the UserContainer presenter
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class UserContainerView extends Parent implements UserContainerPresenter.Display {
+
+    private StackPane stackPane;
+
+    public UserContainerView() {
+        initialize();
+    }
+  
+    public void showParent(Parent parent) {
+        parent.toFront();  
+        for (Node node : parent.getChildrenUnmodifiable()) {
+            node.requestFocus();
+        }
+    }
+
+    public void addParent(Parent parent) {
+        stackPane.getChildren().add(parent);
+    }
+
+    public void removeParent(Parent parent) {
+        stackPane.getChildren().remove(parent);
+    }
+
+    public Parent asParent() {
+        return this;
+    }
+
+    private void initialize() {
+        stackPane = new StackPane();      
+        this.getChildren().add(stackPane);
+    }
+}
+}}}
+
+We still need a user.
+
+{{{
+public final class User {
+
+    private String id;
+    private String firstname;
+    private String lastname;
+
+    public User(String firstname, String lastname) {
+        this.firstname = firstname;
+        this.lastname = lastname;
+    }
+
+    public String getFirstname() {
+        return firstname;
+    }
+
+    public String getLastname() {
+        return lastname;
+    }
+
+    public void setFirstname(String firstname) {
+        this.firstname = firstname;
+    }
+
+    public void setLastname(String lastname) {
+        this.lastname = lastname;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        final User other = (User) obj;
+        if ((this.id == null) ? (other.id != null) : !this.id.equals(other.id)) {
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = 7;
+        hash = 37 * hash + (this.id != null ? this.id.hashCode() : 0);
+        return hash;
+    }
+}
+}}}
+
+= GUICE configuration =
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public final class MvpModule extends AbstractModule{
+
+    @Override
+    protected void configure() {
+        bind(EditUserPresenter.Display.class).to(EditUserView.class).in(Singleton.class);
+        bind(EditUserPresenter.class).in(Singleton.class);
+        
+        bind(AllUserPresenter.Display.class).to(AllUserView.class).in(Singleton.class);
+        bind(AllUserPresenter.class).in(Singleton.class);
+        
+        bind(UserContainerPresenter.Display.class).to(UserContainerView.class).in(Singleton.class);
+        bind(UserContainerPresenter.class).in(Singleton.class);
+        
+        bind(EventBus.class).toProvider(EventBusProvider.class).in(Singleton.class);
+        
+        bind(UserRepository.class);
+    }
+    
+}
+}}}
+
+= Main Frame =
+
+{{{
+/**
+ *
+ * @author Steffen Kämpke
+ */
+public class JfxMvpExample extends Application {
+
+    /**
+     * @param args the command line arguments
+     */
+    public static void main(String[] args) {
+        Application.launch(JfxMvpExample.class, args);
+    }
+
+    @Override
+    public void start(Stage primaryStage) {
+
+        primaryStage.setTitle("Java Fx 2.0 Mvp Example / Steffen Kämpke");
+
+        final Injector injector = Guice.createInjector(new MvpModule());
+        final UserContainerPresenter userContainerPresenter = injector.getInstance(UserContainerPresenter.class);
+
+        Scene scene = new Scene(userContainerPresenter.getDisplay().asParent(), 500, 500);
+
+        primaryStage.setScene(scene);
+        primaryStage.setVisible(true);               
+    }
+}
+}}}
+
+= Download this example =
+
+You can check out the source directly as a Netbeans project [http://code.google.com/p/pennychecker-presenter/source/checkout svn src]
+
+or download the application. [http://code.google.com/p/pennychecker-presenter/downloads/detail?name=jfx-mvp-example.zip&can=2&q=#makechanges download]
