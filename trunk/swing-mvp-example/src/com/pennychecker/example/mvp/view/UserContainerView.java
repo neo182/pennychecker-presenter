@@ -46,19 +46,23 @@ public class UserContainerView extends javax.swing.JPanel implements UserContain
     // Variables declaration - do not modify//GEN-BEGIN:variables
     // End of variables declaration//GEN-END:variables
 
+    @Override
     public void showComponent(JComponent jc) {
         CardLayout cardLayout = (CardLayout) this.getLayout();
         cardLayout.show(this, jc.getName());
     }
 
+    @Override
     public void addComponent(JComponent jc) {
         this.add(jc.getName(), jc);
     }
 
+    @Override
     public void removeComponent(JComponent jc) {
         this.remove(jc);
     }
 
+    @Override
     public JComponent asComponent() {
         return this;
     }

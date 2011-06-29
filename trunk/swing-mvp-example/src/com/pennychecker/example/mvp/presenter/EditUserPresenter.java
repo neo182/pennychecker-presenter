@@ -31,7 +31,6 @@ import java.awt.event.ActionListener;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JButton;
-import javax.swing.JOptionPane;
 
 /**
  *
@@ -144,7 +143,7 @@ public final class EditUserPresenter extends SwingPresenter<EditUserPresenter.Di
             userRepository.save(user);
         } catch (Exception ex) {
             Logger.getLogger(EditUserPresenter.class.getName()).log(Level.SEVERE, null, ex);
-            JOptionPane.showMessageDialog(display.asComponent(), "Could not save the user.");
+            display.setErrorMessage("Could not save the user.");
             return;
         }
 

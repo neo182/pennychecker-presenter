@@ -146,6 +146,7 @@ public class EditUserView extends javax.swing.JPanel implements EditUserPresente
         jTextFieldLastname.setText(user.getLastname());
     }
 
+    @Override
     public JComponent asComponent() {
         return this;
     }

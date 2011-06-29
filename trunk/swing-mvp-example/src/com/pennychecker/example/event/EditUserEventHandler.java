@@ -23,6 +23,5 @@ import com.pennychecker.eventbus.EventHandler;
  * @author Steffen Kämpke
  */
 public interface EditUserEventHandler extends EventHandler {
-
     void onEditUserEvent(EditUserEvent event);
 }
