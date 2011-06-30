@@ -30,4 +30,4 @@ The following libraries are needed
 
 [http://code.google.com/p/pennychecker-presenter/source/checkout /trunk/jfx-mvp-example svn]
 
-[http://code.google.com/p/pennychecker-presenter/source/checkout under construction/trunk/apache-wicket-mvp-example svn]
+[http://code.google.com/p/pennychecker-presenter/source/checkout /trunk/apache-wicket-mvp-example svn]
