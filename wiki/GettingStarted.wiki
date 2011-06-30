@@ -18,7 +18,7 @@ The following libraries are needed
 
 [http://code.google.com/p/pennychecker-presenter/downloads/list pennychecker-presenter]
 
-[http://code.google.com/p/pennychecker-eventbus/downloads/list pennychecker-eventbus-0.0.1]
+[http://code.google.com/p/pennychecker-eventbus/downloads/list pennychecker-eventbus]
 
 
 = Example Applications =
