@@ -26,10 +26,8 @@ The following libraries are needed
 
 [http://code.google.com/p/pennychecker-presenter/source/checkout /trunk/swing-mvp-example svn]
 
-[http://code.google.com/p/pennychecker-presenter/downloads/detail?name=swing-mvp-example.zip&can=2&q=#makechanges JavafxIIMvpExample Bin] under construction
+[http://code.google.com/p/pennychecker-presenter/downloads/detail?name=jfx-mvp-example.zip&can=2&q=#makechanges JavafxIIMvpExample Bin]
 
-[http://code.google.com/p/pennychecker-presenter/source/checkout /trunk/java-fxII-mvp-example svn] under construction
+[http://code.google.com/p/pennychecker-presenter/source/checkout /trunk/jfx-mvp-example svn]
 
-[http://code.google.com/p/pennychecker-presenter/downloads/detail?name=swing-mvp-example.zip&can=2&q=#makechanges ApacheWicketMvpExample Bin] under construction
-
-[http://code.google.com/p/pennychecker-presenter/source/checkout under construction/trunk/apache-wicket-mvp-example svn] under construction
+[http://code.google.com/p/pennychecker-presenter/source/checkout under construction/trunk/apache-wicket-mvp-example svn]
